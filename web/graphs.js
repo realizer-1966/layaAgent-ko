@@ -17,7 +17,7 @@ export function palette() {
 }
 const trunc = (s, n) => { s = String(s ?? ""); return s.length > n ? s.slice(0, n - 1) + "…" : s; };
 const argText = (args) => Object.values(args || {}).filter((v) => v != null && v !== "").map((v) => trunc(v, 28)).join(", ");
-export const WHO = { S1: "System 1 · Laya", S2: "System 2 · WebLLM", human: "You", budget: "Step budget" };
+export const WHO = { S1: "System 1 · Laya", S2: "System 2 · WebLLM", human: "사용자", budget: "단계 예산" };
 
 let tipEl = null;
 function tip(cy) {
@@ -41,12 +41,12 @@ function baseStyle(P) {
 
 /** Route of a step at the CURRENT gate (may differ from how it was decided, when a slider moved). */
 function stepLabel(s, rerouted) {
-  const who = s.decidedBy === "S1" ? "S1" : s.decidedBy === "S2" ? "S2" : s.decidedBy === "human" ? "you" : s.decidedBy;
+  const who = s.decidedBy === "S1" ? "S1" : s.decidedBy === "S2" ? "S2" : s.decidedBy === "human" ? "사용자" : s.decidedBy;
   // a FINISH from System 1 comes from its "goal met" question, so show that probability, not the FINISH option's
   const gm = s.action === FINISH ? s.s1?.answers?.goal_met?.noul : null;
   const p = s.s1?.answers?.next_action?.probabilities?.[s.action];
-  const score = s.decidedBy !== "S1" ? "" : gm != null ? ` · goal met ${gm.toFixed(2)}` : p != null ? ` · p ${p.toFixed(2)}` : "";
-  return `#${s.index + 1} ${s.action || "stop"}\n${who}${score}${rerouted ? `\nnow: ${rerouted}` : ""}`;
+  const score = s.decidedBy !== "S1" ? "" : gm != null ? ` · 목표 달성 p ${gm.toFixed(2)}` : p != null ? ` · p ${p.toFixed(2)}` : "";
+  return `#${s.index + 1} ${s.action || "멈춤"}\n${who}${score}${rerouted ? `\n현재: ${rerouted}` : ""}`;
 }
 
 export function traceElements(run, opts = {}) {
@@ -61,36 +61,36 @@ export function traceElements(run, opts = {}) {
     // System 1's own diamond (only when it was overruled / escalated)
     if (held && a) {
       const pk = s.proposal?.action ?? a.next_action?.choice;
-      els.push({ data: { id: `s1_${i}`, label: `#${i + 1} S1 proposed\n${pk}${a.next_action?.probabilities?.[pk] != null ? ` · p ${a.next_action.probabilities[pk].toFixed(2)}` : ""}`, tip: `System 1 was not sure:\n${(s.reasons || []).join("\n")}`, step: i, kind: "s1" }, classes: "dec s1 held" });
+      els.push({ data: { id: `s1_${i}`, label: `#${i + 1} S1 제안\n${pk}${a.next_action?.probabilities?.[pk] != null ? ` · p ${a.next_action.probabilities[pk].toFixed(2)}` : ""}`, tip: `System 1이 확신하지 못했습니다:\n${(s.reasons || []).join("\n")}`, step: i, kind: "s1" }, classes: "dec s1 held" });
       els.push({ data: { id: `${prev}->s1_${i}`, source: prev, target: `s1_${i}`, label: "" }, classes: "flow" });
       els.push({ data: { id: `s1_${i}->d_${i}`, source: `s1_${i}`, target: `d_${i}`, label: "HOLD", tip: (s.reasons || []).join("\n") }, classes: "escalate" });
     }
     const re = opts.reroute?.[i];
-    els.push({ data: { id: `d_${i}`, label: stepLabel(s, re && re !== s.route ? re : null), tip: `${WHO[s.decidedBy] || s.decidedBy} decided: ${s.action}(${argText(s.args)})${s.reasons?.length ? "\nwhy it was held: " + s.reasons.join("; ") : ""}`, step: i, kind: "decision" }, classes: `dec ${cls[s.decidedBy] || "budget"}${s.replayed ? " replayed" : ""}${opts.forcedAt === i ? " forced" : ""}` });
+    els.push({ data: { id: `d_${i}`, label: stepLabel(s, re && re !== s.route ? re : null), tip: `${WHO[s.decidedBy] || s.decidedBy} 결정: ${s.action}(${argText(s.args)})${s.reasons?.length ? "\n보류 이유: " + s.reasons.join("; ") : ""}`, step: i, kind: "decision" }, classes: `dec ${cls[s.decidedBy] || "budget"}${s.replayed ? " replayed" : ""}${opts.forcedAt === i ? " forced" : ""}` });
     if (!held || !a) els.push({ data: { id: `${prev}->d_${i}`, source: prev, target: `d_${i}`, label: "" }, classes: "flow" });
     // alternatives System 1 considered
     if (a?.next_action) {
       const from = held ? `s1_${i}` : `d_${i}`;
       topOptions(a.next_action, 3).filter((o) => o.key !== (s.proposal?.action ?? s.action)).slice(0, 2).forEach((o, k) => {
-        els.push({ data: { id: `alt_${i}_${k}`, label: `${o.key}\n${(o.p * 100).toFixed(0)}%`, tip: `System 1 gave ${o.key} p = ${o.p.toFixed(3)}.\nClick to replay the run from here with this action (needs System 1 loaded).`, step: i, alt: o.key, kind: "alt" }, classes: "alt" });
+        els.push({ data: { id: `alt_${i}_${k}`, label: `${o.key}\n${(o.p * 100).toFixed(0)}%`, tip: `System 1은 ${o.key}에 p = ${o.p.toFixed(3)}을 주었습니다.\n클릭하면 이 행동으로 이 지점부터 다시 실행합니다 (System 1 필요).`, step: i, alt: o.key, kind: "alt" }, classes: "alt" });
         els.push({ data: { id: `${from}->alt_${i}_${k}`, source: from, target: `alt_${i}_${k}`, label: "" }, classes: "altedge" });
       });
     }
     let tail = `d_${i}`;
     if (s.guard) {
-      els.push({ data: { id: `g_${i}`, label: s.guard.allowed ? "you allowed it" : "you refused", tip: `Guard: ${s.guard.reason}`, step: i, kind: "guard" }, classes: `guard ${s.guard.allowed ? "ok" : "no"}` });
-      els.push({ data: { id: `${tail}->g_${i}`, source: tail, target: `g_${i}`, label: "confirm?" }, classes: "flow" });
+      els.push({ data: { id: `g_${i}`, label: s.guard.allowed ? "허용함" : "거부함", tip: `가드: ${s.guard.reason}`, step: i, kind: "guard" }, classes: `guard ${s.guard.allowed ? "ok" : "no"}` });
+      els.push({ data: { id: `${tail}->g_${i}`, source: tail, target: `g_${i}`, label: "확인?" }, classes: "flow" });
       tail = `g_${i}`;
       if (!s.guard.allowed) { prev = tail; return; }
     }
     if (!s.action) { prev = tail; return; }
     if (s.action === FINISH) {
       const out = run.outcome;
-      els.push({ data: { id: "answer", label: trunc(out?.text || "done", 120), tip: out?.text || "", kind: "answer" }, classes: "answer" });
+      els.push({ data: { id: "answer", label: trunc(out?.text || "완료", 120), tip: out?.text || "", kind: "answer" }, classes: "answer" });
       els.push({ data: { id: `${tail}->answer`, source: tail, target: "answer", label: "" }, classes: "flow" });
       prev = "answer"; return;
     }
-    els.push({ data: { id: `t_${i}`, label: `${s.action}(${argText(s.args)})${s.tool ? `\n${Math.round(s.tool.ms)} ms` : ""}`, tip: `${s.action}(${JSON.stringify(s.args)})${s.tool?.error ? "\nerror: " + s.tool.error : ""}`, step: i, kind: "tool" }, classes: `tool${s.tool && !s.tool.ok ? " fail" : ""}` });
+    els.push({ data: { id: `t_${i}`, label: `${s.action}(${argText(s.args)})${s.tool ? `\n${Math.round(s.tool.ms)} ms` : ""}`, tip: `${s.action}(${JSON.stringify(s.args)})${s.tool?.error ? "\n오류: " + s.tool.error : ""}`, step: i, kind: "tool" }, classes: `tool${s.tool && !s.tool.ok ? " fail" : ""}` });
     els.push({ data: { id: `${tail}->t_${i}`, source: tail, target: `t_${i}`, label: "" }, classes: "flow" });
     els.push({ data: { id: `o_${i}`, label: trunc(s.observation, 110), tip: s.observation, step: i, kind: "obs" }, classes: "obs" });
     els.push({ data: { id: `t_${i}->o_${i}`, source: `t_${i}`, target: `o_${i}`, label: "" }, classes: "flow" });
@@ -156,7 +156,7 @@ export function renderSession(container, runs, onSelect) {
       const x = node(id); x.n++; x[s.decidedBy] = (x[s.decidedBy] || 0) + 1; if (s.route === "HOLD") x.held++; if (s.guard) x.blocked++;
       edge(prev, id); prev = id;
     }
-    const end = r.outcome?.kind === "answered" ? "answered" : r.outcome?.kind || "stopped";
+    const end = r.outcome?.kind === "answered" ? "답변" : r.outcome?.kind === "stopped" ? "멈춤" : r.outcome?.kind === "budget" ? "예산 도달" : r.outcome?.kind === "error" ? "오류" : r.outcome?.kind || "멈춤";
     node("◼ " + end).n++; edge(prev, "◼ " + end);
   }
   const maxE = Math.max(1, ...edges.values());
@@ -164,8 +164,8 @@ export function renderSession(container, runs, onSelect) {
   for (const x of nodes.values()) {
     const isEnd = x.id.startsWith("◼") || x.id === "START";
     const s1 = x.S1 || 0, tot = (x.S1 || 0) + (x.S2 || 0) + (x.human || 0);
-    const label = isEnd ? `${x.id}\n${x.n}` : `${x.id}\n${x.n} call${x.n > 1 ? "s" : ""}${tot ? ` · S1 ${Math.round((100 * s1) / tot)}%` : ""}${x.held ? ` · ${x.held} held` : ""}`;
-    els.push({ data: { id: x.id, label, heat: x.n ? x.held / x.n : 0, tip: `${x.id}: ${x.n}\nSystem 1 ${x.S1 || 0} · System 2 ${x.S2 || 0} · you ${x.human || 0}\nheld for escalation: ${x.held}${x.blocked ? `\nconfirmations asked: ${x.blocked}` : ""}` }, classes: isEnd ? "end" : x.id === "FINISH" ? "fin" : "toolnode" });
+    const label = isEnd ? `${x.id}\n${x.n}` : `${x.id}\n${x.n}회${tot ? ` · S1 ${Math.round((100 * s1) / tot)}%` : ""}${x.held ? ` · 보류 ${x.held}` : ""}`;
+    els.push({ data: { id: x.id, label, heat: x.n ? x.held / x.n : 0, tip: `${x.id}: ${x.n}\nSystem 1 ${x.S1 || 0} · System 2 ${x.S2 || 0} · 사용자 ${x.human || 0}\n에스컬레이션 보류: ${x.held}${x.blocked ? `\n승인 요청: ${x.blocked}` : ""}` }, classes: isEnd ? "end" : x.id === "FINISH" ? "fin" : "toolnode" });
   }
   for (const [k, c] of edges) { const [a, b] = k.split("->"); els.push({ data: { id: k, source: a, target: b, label: String(c), w: 1.5 + 8 * (c / maxE) } }); }
   const style = [

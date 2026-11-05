@@ -37,9 +37,9 @@ function setPill(kind, text) { const p = $("modelPill"); if (!p) return; p.class
 export function setStatus(msg, warn = false) { const s = $("status"); s.textContent = msg; s.classList.toggle("warn", warn); }
 function setProgress(f) { $("progress").hidden = f == null; if (f != null) $("progressBar").style.width = (f * 100).toFixed(1) + "%"; }
 export function updatePill() {
-  if (M.loading || M.s2Loading) return setPill("busy", "Loading…");
-  if (M.laya) return setPill("ready", `System 1 ready${M.s2 ? " · System 2 ready" : ""}`);
-  setPill("replay", "Playback · load System 1 to run your own goals");
+  if (M.loading || M.s2Loading) return setPill("busy", "불러오는 중…");
+  if (M.laya) return setPill("ready", `System 1 준비됨${M.s2 ? " · System 2 준비됨" : ""}`);
+  setPill("replay", "재생 모드 · System 1을 불러오면 직접 실행할 수 있습니다");
 }
 function badge(t, ok) { const b = document.createElement("span"); b.className = "badge" + (ok ? " ok" : ""); b.textContent = t; $("badges").appendChild(b); }
 
@@ -52,11 +52,11 @@ export async function initModelCard() {
   const gpu = hasWebGPU() && !!(await navigator.gpu.requestAdapter().catch(() => null));
   M.webgpu = gpu;
   $("s2LoadBtn").disabled = !gpu;
-  $("s2Note").textContent = gpu ? "Loads only when you ask (or on the first escalation, if enabled below). Needs WebGPU; weights are cached by the browser." : "WebGPU is not available in this browser, so System 2 cannot run here: steps Laya is unsure about go to you instead.";
+  $("s2Note").textContent = gpu ? "직접 누를 때만 불러옵니다(아래에서 켜면 첫 에스컬레이션에서 자동으로). WebGPU가 필요하고 가중치는 브라우저가 캐시합니다." : "이 브라우저에는 WebGPU가 없어 System 2를 실행할 수 없습니다. Laya가 확신하지 못하는 단계는 사용자에게 넘어갑니다.";
   updatePill();
   const m = await modelApi();
   const base = m.modelBase();
-  const link = $("modelLink"); link.href = base === m.DEFAULT_MODEL_BASE ? m.MODEL_PAGE : base; link.textContent = base === m.DEFAULT_MODEL_BASE ? "VishalMysore/layaForWebTrained" : base;
+  const link = $("modelLink"); link.href = base === m.DEFAULT_MODEL_BASE ? m.MODEL_PAGE : base; link.textContent = base === m.DEFAULT_MODEL_BASE ? "convaiinnovations/laya-multilingual (미러)" : base;
   try {
     M.manifest = await m.fetchManifest(base);
     const sel = $("variant"); sel.innerHTML = "";
@@ -64,13 +64,13 @@ export async function initModelCard() {
     const saved = settings.get("variant", M.webgpu ? "q4e8" : "q8e8");
     for (const [k, v] of Object.entries(M.manifest.variants)) {
       const cached = await m.cachedParts(base, v.data);
-      const tag = cached === v.data.parts.length ? ", cached" : cached ? `, ${cached}/${v.data.parts.length} parts cached` : "";
-      sel.add(new Option(`${k === "q8e8" ? "int8 (WASM, any browser)" : k === "q4e8" ? "int4 (WebGPU, faster)" : v.label} · ${Math.round(v.data.size / 1048576)} MB${tag}`, k));
+      const tag = cached === v.data.parts.length ? ", 캐시됨" : cached ? `, ${cached}/${v.data.parts.length}개 캐시됨` : "";
+      sel.add(new Option(`${k === "q8e8" ? "int8 (WASM, 모든 브라우저)" : k === "q4e8" ? "int4 (WebGPU, 더 빠름)" : v.label} · ${Math.round(v.data.size / 1048576)} MB${tag}`, k));
     }
     if (M.manifest.variants[saved]) sel.value = saved;
     $("loadBtn").disabled = false;
   } catch (e) {
-    setStatus(`Could not read the model manifest from ${base} (${e.message}). Recorded runs still play back.`, true);
+    setStatus(`모델 매니페스트를 읽지 못했습니다: ${base} (${e.message}). 녹음된 실행은 계속 재생됩니다.`, true);
   }
 }
 
@@ -83,12 +83,12 @@ export async function loadS1() {
     const m = await modelApi();
     const { laya, backend, info } = await m.loadLaya({ base: m.modelBase(), manifest: M.manifest, variant: $("variant").value, backend: $("backend").value, onStatus: setStatus, onProgress: setProgress });
     M.laya = laya; M.info = { backend, ...info };
-    setStatus(`System 1 ready: download ${(info.downloadMs / 1000).toFixed(1)} s${info.fromCache ? ` (${info.fromCache}/${info.parts} parts from cache)` : ""}, session ${(info.initMs / 1000).toFixed(1)} s, warm-up ${(info.warmMs / 1000).toFixed(1)} s.`);
-    badge(`S1: Laya ${info.variant} · ${backend === "webgpu" ? "WebGPU" : `WASM · ${info.threads} thread${info.threads > 1 ? "s" : ""}`}`, true);
-    badge(`context ${info.maxLen} tokens`);
-    $("loadBtn").textContent = "Reload System 1";
+    setStatus(`System 1 준비됨: 내려받기 ${(info.downloadMs / 1000).toFixed(1)}초${info.fromCache ? ` (${info.fromCache}/${info.parts}개 부품은 캐시)` : ""}, 세션 생성 ${(info.initMs / 1000).toFixed(1)}초, 워밍업 ${(info.warmMs / 1000).toFixed(1)}초.`);
+    badge(`S1: Laya ${info.variant} · ${backend === "webgpu" ? "WebGPU" : `WASM · 스레드 ${info.threads}개`}`, true);
+    badge(`문맥 ${info.maxLen} 토큰`);
+    $("loadBtn").textContent = "System 1 다시 불러오기";
   } catch (e) {
-    console.error(e); setStatus("Could not load System 1: " + (e?.message || e), true);
+    console.error(e); setStatus("System 1을 불러오지 못했습니다: " + (e?.message || e), true);
   } finally { M.loading = false; $("loadBtn").disabled = false; setProgress(null); changed(); }
 }
 
@@ -100,11 +100,11 @@ export async function loadS2() {
     if (M.s2) { await M.s2.unload(); M.s2 = null; }
     const { loadSystem2 } = await import("./system2.js");
     M.s2 = await loadSystem2({ model, onProgress: (f, text) => { setProgress(f); setStatus(`System 2: ${text}`); } });
-    setStatus(`System 2 ready: ${M.s2.info.label}, loaded in ${(M.s2.info.loadMs / 1000).toFixed(1)} s.`);
+    setStatus(`System 2 준비됨: ${M.s2.info.label}, ${(M.s2.info.loadMs / 1000).toFixed(1)}초 만에 로드.`);
     badge(`S2: ${model.replace(/-q4f.*$/, "")} · WebGPU`, true);
     $("s2LoadBtn").textContent = "Reload System 2";
   } catch (e) {
-    console.error(e); setStatus("Could not load System 2: " + (e?.message || e), true); M.s2 = null;
+    console.error(e); setStatus("System 2를 불러오지 못했습니다: " + (e?.message || e), true); M.s2 = null;
   } finally { M.s2Loading = false; $("s2LoadBtn").disabled = !M.webgpu; setProgress(null); changed(); }
   return M.s2;
 }

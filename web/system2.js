@@ -8,8 +8,8 @@ import { TOOLS, TOOL } from "./tools/index.js";
 // q4f32 builds, not q4f16: on the Intel iGPU we tested, the f16 builds generated garbage ("setColor setColor ...")
 // once decoding was unconstrained, and a JSON grammar only disguised it (every reply became ask_user).
 export const S2_MODELS = {
-  "Qwen2.5-1.5B-Instruct-q4f32_1-MLC": { label: "Qwen2.5 1.5B Instruct (default, ~1.6 GB)", license: "Apache-2.0" },
-  "Qwen2.5-0.5B-Instruct-q4f32_1-MLC": { label: "Qwen2.5 0.5B Instruct (light, ~0.6 GB)", license: "Apache-2.0" },
+  "Qwen2.5-1.5B-Instruct-q4f32_1-MLC": { label: "Qwen2.5 1.5B Instruct (기본, ~1.6 GB)", license: "Apache-2.0" },
+  "Qwen2.5-0.5B-Instruct-q4f32_1-MLC": { label: "Qwen2.5 0.5B Instruct (가벼움, ~0.6 GB)", license: "Apache-2.0" },
   "Llama-3.2-1B-Instruct-q4f32_1-MLC": { label: "Llama 3.2 1B Instruct (~1.1 GB)", license: "Llama 3.2 Community License" },
 };
 export const DEFAULT_S2 = "Qwen2.5-1.5B-Instruct-q4f32_1-MLC";
@@ -25,30 +25,30 @@ export const STEP_SCHEMA = {
   required: ["action", "args"],
 };
 
-export const SYSTEM_PROMPT = "You are the planner of a tool-using assistant. You choose the next tool call. Answer with one JSON object only.";
+export const SYSTEM_PROMPT = "당신은 도구를 쓰는 비서의 계획자입니다. 다음에 호출할 도구를 하나 고르세요. JSON 객체 하나만 답하세요.";
 
 const toolLine = (t) => {
   const args = t.id === "ask_user" ? ["question"] : t.slots.map((sl) => (sl.fixed ? `${sl.name} (one of: ${Object.keys(sl.fixed).join(", ")})` : sl.name));
-  return `- ${t.id}: ${t.whenToUse}.${args.length ? " Args: " + args.join(", ") : ""}`;
+  return `- ${t.id}: ${t.whenToUse}.${args.length ? " 인자: " + args.join(", ") : ""}`;
 };
 
 /** A plain-text prompt: small models follow this far better than a JSON blob (measured on the dev split). */
 export function buildPrompt({ goal, state, s1View, reasons }) {
   const lines = [
-    `Goal: ${goal}`,
-    state.steps_done.length ? "Steps done:\n" + state.steps_done.map((l) => "- " + l).join("\n") : "Steps done: none yet",
+    `목표: ${goal}`,
+    state.steps_done.length ? "지금까지 한 단계:\n" + state.steps_done.map((l) => "- " + l).join("\n") : "지금까지 한 단계: 없음",
   ];
-  if (state.last_observation) lines.push(`Result of the last step: ${state.last_observation}`);
-  lines.push("", "Tools:", ...TOOLS.map(toolLine), "");
+  if (state.last_observation) lines.push(`직전 단계 결과: ${state.last_observation}`);
+  lines.push("", "도구:", ...TOOLS.map(toolLine), "");
   const top = s1View?.top_actions?.length ? s1View.top_actions.map((a) => `${a.action} (${Math.round(a.p * 100)}%)`).join(", ") : "";
-  if (top) lines.push(`A smaller model suggested: ${top}. It was unsure${reasons?.length ? ` (${reasons.join("; ")})` : ""}.`);
+  if (top) lines.push(`더 작은 모델(System 1)의 제안: ${top}. 확신하지 못했습니다${reasons?.length ? ` (${reasons.join("; ")})` : ""}.`);
   const cands = Object.entries(s1View?.slot_candidates || {}).filter(([, v]) => v.length);
-  if (cands.length) lines.push("Spans found in the text: " + cands.map(([k, v]) => `${k}: ${v.slice(0, 8).join(" | ")}`).join("; "));
+  if (cands.length) lines.push("본문에서 찾은 표현: " + cands.map(([k, v]) => `${k}: ${v.slice(0, 8).join(" | ")}`).join("; "));
   lines.push(
-    state.steps_done.length ? "The goal is not answered yet, so do not repeat a call that was already done." : "Nothing has been looked up yet.",
-    "Copy argument values from the goal or the last result when they are there; write a new value only when they are not (for example the real name behind a nickname).",
-    "Use ask_user only when the goal does not say what or where. Use calculator for any arithmetic.",
-    'Reply with JSON: {"action": "<tool id>", "args": {...}, "reason": "<a few words>"}',
+    state.steps_done.length ? "아직 목표에 답하지 못했으니 이미 한 호출을 반복하지 마세요." : "아직 아무것도 찾아보지 않았습니다.",
+    "인자 값이 목표나 직전 결과에 있으면 그대로 옮겨 쓰고, 없을 때만 새로 쓰세요(예: 별명 뒤의 실제 이름).",
+    "목표에 무엇을·어디를 말하지 않았을 때만 ask_user를 쓰세요. 계산은 모두 calculator로 하세요.",
+    'JSON으로 답하세요: {"action": "<도구 id>", "args": {...}, "reason": "<짧은 이유>"}',
   );
   return lines.join("\n");
 }
@@ -56,7 +56,7 @@ export function buildPrompt({ goal, state, s1View, reasons }) {
 /** The yes/no stop check System 2 answers before planning (from the second step on). */
 export function doneCheckPrompt({ goal, state }) {
   // wording chosen on the dev split: "does it answer the question completely?" made the model say no to everything
-  return ["Question: " + goal, "Found: " + state.last_observation, "", "Is the answer to the question contained in what was found? Reply with only yes or no."].join("\n");
+  return ["질문: " + goal, "찾은 내용: " + state.last_observation, "", "찾은 내용에 질문의 답이 들어 있습니까? 예 또는 아니오로만 답하세요."].join("\n");
 }
 
 /** Parse and tidy a JSON reply: map labels of fixed slots back to keys, drop args the tool does not take. */
@@ -70,9 +70,9 @@ export function parseReply(text) {
     if (inStr) { if (c === "\\") i++; else if (c === '"') inStr = false; continue; }
     if (c === '"') inStr = true; else if (c === "{") depth++; else if (c === "}" && --depth === 0) { end = i; break; }
   }
-  if (start < 0 || end < 0) throw new Error("System 2 did not return JSON");
+  if (start < 0 || end < 0) throw new Error("System 2가 JSON을 돌려주지 않았습니다");
   const j = JSON.parse(src.slice(start, end + 1));
-  if (!TOOL[j.action]) throw new Error(`System 2 chose an unknown action "${j.action}"`);
+  if (!TOOL[j.action]) throw new Error(`System 2가 알 수 없는 행동을 골랐습니다: "${j.action}"`);
   const tool = TOOL[j.action];
   const args = {};
   if (tool) {
@@ -95,7 +95,7 @@ export function hasWebGPU() { return typeof navigator !== "undefined" && !!navig
  * @param opts { model, onProgress(fraction|null, text) }
  */
 export async function loadSystem2({ model = DEFAULT_S2, onProgress = () => {} } = {}) {
-  if (!hasWebGPU()) throw new Error("WebGPU is not available in this browser, so System 2 cannot run here. The agent will ask you instead.");
+  if (!hasWebGPU()) throw new Error("이 브라우저에는 WebGPU가 없어 System 2를 실행할 수 없습니다. 대신 에이전트가 사용자에게 묻습니다.");
   const webllm = await import("./vendor/web-llm.mjs");
   const t0 = performance.now();
   const worker = new Worker(new URL("./s2-worker.js", import.meta.url), { type: "module" });
@@ -114,8 +114,8 @@ export async function loadSystem2({ model = DEFAULT_S2, onProgress = () => {} } 
       if (payload.state.last_observation) {
         const check = doneCheckPrompt(payload);
         const r = await engine.chat.completions.create({ temperature: 0, max_tokens: 3, messages: [{ role: "user", content: check }] });
-        const yes = /^\W*yes/i.test(r.choices?.[0]?.message?.content || "");
-        if (yes) return { action: "FINISH", args: {}, reason: "the last result answers the goal", raw: r.choices[0].message.content, prompt: check, ms: performance.now() - t };
+        const yes = /^(?:\W*(?:yes|예|네))/i.test(r.choices?.[0]?.message?.content || "");
+        if (yes) return { action: "FINISH", args: {}, reason: "직전 결과가 목표에 답함", raw: r.choices[0].message.content, prompt: check, ms: performance.now() - t };
       }
       // 2) otherwise plan the next tool call
       const prompt = buildPrompt(payload);
@@ -138,7 +138,7 @@ export async function loadSystem2({ model = DEFAULT_S2, onProgress = () => {} } 
       const reply = await engine.chat.completions.create({
         temperature: 0, max_tokens: 160,
         messages: [
-          { role: "system", content: "Answer the user's question in one short paragraph using ONLY the facts given. Do not add facts. Keep numbers exactly as written." },
+          { role: "system", content: "주어진 사실만 사용해 사용자의 질문에 한 짧은 문단으로 답하세요. 사실을 추가하지 말고 숫자는 그대로 쓰세요." },
           { role: "user", content: JSON.stringify({ question: goal, facts, draft_answer: templated }) },
         ],
       });

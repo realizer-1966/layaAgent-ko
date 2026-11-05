@@ -32,11 +32,11 @@ export function s1View(answers, argQs) {
 
 /** Check a decision from System 2 or a person against the registry; returns an error string or null. */
 export function validateDecision(d) {
-  if (!d || !TOOL[d.action]) return `unknown action "${d?.action}"`;
+  if (!d || !TOOL[d.action]) return `알 수 없는 행동 "${d?.action}"`;
   for (const slot of TOOL[d.action].slots) {
     const v = d.args?.[slot.name];
-    if (v == null || String(v).trim() === "" || v === NONE) return `missing ${slot.name}`;
-    if (slot.fixed && !(v in slot.fixed)) return `${slot.name} must be one of ${Object.keys(slot.fixed).join(", ")}`;
+    if (v == null || String(v).trim() === "" || v === NONE) return `${slot.name} 값이 없습니다`;
+    if (slot.fixed && !(v in slot.fixed)) return `${slot.name}은(는) 다음 중 하나여야 합니다: ${Object.keys(slot.fixed).join(", ")}`;
   }
   return null;
 }
@@ -45,7 +45,7 @@ export function validateDecision(d) {
 export function composeAnswer(steps) {
   // the user's own reply to ask_user is context, not an answer
   const done = steps.filter((s) => s.action !== FINISH && s.action !== "ask_user" && s.result && s.result.ok !== false && s.result.answer);
-  if (!done.length) return { text: "I could not find an answer.", sources: [] };
+  if (!done.length) return { text: "답을 찾지 못했습니다.", sources: [] };
   const last = done.at(-1);
   const sources = [...new Set(done.map((s) => s.result.source).filter(Boolean))];
   return { text: last.result.answer, sources, from: done.map((s) => s.index) };
@@ -74,7 +74,7 @@ export async function runAgent(goal, deps, opts = {}) {
     const rec = { index: i, state, candidates: cands, s1: {}, decidedBy: null, reasons: [] };
 
     if (i >= o.maxSteps) {
-      rec.decidedBy = "budget"; rec.action = FINISH; rec.args = {}; rec.reasons = [`step budget of ${o.maxSteps} reached`];
+      rec.decidedBy = "budget"; rec.action = FINISH; rec.args = {}; rec.reasons = [`단계 예산 ${o.maxSteps}개에 도달`];
       steps.push(rec); await o.onStep?.(rec, steps); outcome = { kind: "budget" }; break;
     }
 
@@ -120,7 +120,7 @@ export async function runAgent(goal, deps, opts = {}) {
     }
     if (!decision) {
       const h = await deps.human.decide({ goal, state, s1View: view, reasons: g.reasons, proposal: g.proposal, s2: rec.s2, candidates: cands });
-      if (!h) { rec.decidedBy = "human"; rec.action = null; steps.push(rec); await o.onStep?.(rec, steps); outcome = { kind: "stopped", text: "Stopped by the user." }; break; }
+      if (!h) { rec.decidedBy = "human"; rec.action = null; steps.push(rec); await o.onStep?.(rec, steps); outcome = { kind: "stopped", text: "사용자가 멈췄습니다." }; break; }
       decision = h; rec.decidedBy = "human";
     }
     rec.action = decision.action; rec.args = decision.args || {};
@@ -128,7 +128,7 @@ export async function runAgent(goal, deps, opts = {}) {
     // what it already found (small LLMs in particular re-issue the call that just answered the goal)
     if (prev && rec.action !== FINISH && rec.action === prev.action && sameArgs(rec.args, prev.args)) {
       rec.repeatOf = { action: rec.action, args: rec.args };
-      rec.reasons = [...rec.reasons, `${rec.decidedBy} repeated the previous call, so the agent finished with what it found`];
+      rec.reasons = [...rec.reasons, `${rec.decidedBy}가 직전 호출을 반복해, 지금까지 찾은 것으로 마무리했습니다`];
       rec.action = FINISH; rec.args = {};
     }
 
@@ -138,9 +138,9 @@ export async function runAgent(goal, deps, opts = {}) {
       const ok = await deps.human.confirm({ action: rec.action, args: rec.args, reason: gd.reason, decidedBy: rec.decidedBy });
       rec.guard = { reason: gd.reason, allowed: !!ok, layaRisky: answers.risky?.noul ?? null };
       if (!ok) {
-        rec.observation = `The user refused ${rec.action}.`;
+        rec.observation = `사용자가 ${rec.action} 실행을 거부했습니다.`;
         steps.push(rec); await o.onStep?.(rec, steps);
-        outcome = { kind: "refused", text: `Not done: you declined to let the agent run ${rec.action}.` };
+        outcome = { kind: "refused", text: `실행하지 않았습니다: ${rec.action} 실행을 거부하셨습니다.` };
         break;
       }
     }
@@ -158,13 +158,13 @@ export async function runAgent(goal, deps, opts = {}) {
       rec.result = res; rec.observation = res.observation; rec.tool = { id: rec.action, input: rec.args, ms: now() - t1, ok: res.ok !== false };
     } catch (e) {
       rec.tool = { id: rec.action, input: rec.args, ms: now() - t1, ok: false, error: String(e?.message || e) };
-      rec.observation = `${rec.action} failed: ${rec.tool.error}`;
+      rec.observation = `${rec.action} 실패: ${rec.tool.error}`;
       rec.result = { ok: false, observation: rec.observation };
     }
     rec.line = stepLine(rec.action, rec.args, rec.observation);
     steps.push(rec); await o.onStep?.(rec, steps);
   }
-  if (!outcome) outcome = { kind: "budget", text: "Step budget reached." };
+  if (!outcome) outcome = { kind: "budget", text: "단계 예산에 도달했습니다." };
   if (outcome.kind === "answered" && o.rewrite && deps.s2?.ready?.() && deps.s2.rewrite) {
     try { const r = await deps.s2.rewrite(goal, outcome.text, steps); outcome = { ...outcome, templated: outcome.text, text: r.text, rewrittenBy: "S2", rewriteMs: r.ms }; } catch { /* keep the template */ }
   }

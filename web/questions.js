@@ -1,5 +1,5 @@
-// The typed questions System 1 (Laya) answers. Laya never writes: every question is a choice among options that
-// something else proposed (the tool registry, the candidate extractor, a fixed list) or a yes/no.
+// Laya(System 1)가 답하는 질문들. Laya는 절대 쓰지 않는다: 모든 질문은 다른 무언가(도구 등록부, 후보 추출기,
+// 고정 목록)가 제안한 선택지 중 하나를 고르거나 예/아니오로 답하는 형태다.
 import { TOOLS } from "./tools/index.js";
 import { slotOptions, NONE } from "./candidates.js";
 
@@ -13,15 +13,15 @@ export function actionQuestions(tools = TOOLS, stepIndex = 1) {
   const q = {
     next_action: {
       type: "choice",
-      instructions: "Which tool should the assistant use next for this goal?",
+      instructions: "이 목표를 위해 다음에 어떤 도구를 써야 하는가?",
       criteria: Object.fromEntries(tools.map((t) => [t.id, t.whenToUse])),
     },
   };
-  if (stepIndex > 0) q.goal_met = { type: "noul", instructions: "The last observation contains the final answer to the goal" };
+  if (stepIndex > 0) q.goal_met = { type: "noul", instructions: "마지막 관찰 결과에 목표에 대한 최종 답이 들어 있다" };
   return q;
 }
 
-export const riskQuestion = () => ({ risky: { type: "noul", instructions: "The goal asks to save, send, delete or change something for the user" } });
+export const riskQuestion = () => ({ risky: { type: "noul", instructions: "이 목표는 사용자를 대신해 무언가를 저장하거나 보내거나 지우거나 바꾸라고 한다" } });
 export const riskState = (goal) => ({ goal });
 
 /**

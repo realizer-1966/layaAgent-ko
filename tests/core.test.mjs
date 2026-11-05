@@ -1,5 +1,5 @@
-// Node unit tests: tools (no network), candidate extraction, state budget, gate, agent loop with a mock Laya,
-// metrics, the task suite and recorded.json. Run: npm test
+// Node 단위 테스트 (한국어판): 도구(네트워크 없음), 한국어 후보 추출, 상태 예산, 게이트, 모의 Laya로 돌린
+// 에이전트 루프, 지표, 과제 세트, recorded.json. 실행: npm test
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -7,8 +7,8 @@ import nlp from "compromise";
 import dates from "compromise-dates";
 import { evaluateExpression } from "../web/tools/calculator.js";
 import { parseQuantity, convert } from "../web/tools/units.js";
-import datemath, { parseDate, parseOffset } from "../web/tools/datemath.js";
-import { dayIndices } from "../web/tools/weather.js";
+import { parseDate, parseOffset } from "../web/tools/datemath.js";
+import { dayIndices as weatherDays } from "../web/tools/weather.js";
 import { memoryNotes, searchNotes } from "../web/tools/notes.js";
 import { currentStatements } from "../web/tools/wikidata.js";
 import { firstSentences } from "../web/tools/wiki.js";
@@ -23,117 +23,133 @@ import { evaluate, taskResults, tuneOnDev } from "../web/metrics.js";
 import { parseReply, STEP_SCHEMA } from "../web/system2.js";
 import { questionsKey } from "../web/evalrun.js";
 import { toTurtle, compactRun, reroute } from "../web/trace.js";
+import { splitParticle, nounSpans, clauses, arithmetic } from "../web/ko.js";
 
 nlp.plugin(dates);
 const tasks = JSON.parse(fs.readFileSync(new URL("../web/tasks.json", import.meta.url), "utf8"));
 
-// ---- tools ------------------------------------------------------------------------------------------------------------
-test("calculator: natural spans and precedence, no eval", () => {
-  assert.equal(evaluateExpression("18% of 2,450"), 441);
+// ---- 도구 -----------------------------------------------------------------------------------------------------------
+test("calculator: 한국어 산술과 퍼센트, eval 없음", () => {
+  assert.equal(evaluateExpression("2,450의 18%"), 441);
   assert.equal(evaluateExpression("(45 + 55) * 3"), 300);
-  assert.equal(evaluateExpression("2^16"), 65536);
-  assert.equal(evaluateExpression("7,200 divided by 16"), 450);
-  assert.equal(evaluateExpression("1,250 times 12"), 15000);
+  assert.equal(evaluateExpression("7,200 나누기 16"), 450);
+  assert.equal(evaluateExpression("1,250 곱하기 12"), 15000);
+  assert.equal(evaluateExpression("2의 10제곱"), 1024);
+  assert.equal(evaluateExpression("3 + 4 곱하기 2"), 11);
   assert.throws(() => evaluateExpression("alert(1)"));
 });
 
-test("units: parse and convert", () => {
-  assert.deepEqual(parseQuantity("20 degrees Fahrenheit"), { value: 20, unit: "F" });
-  assert.deepEqual(parseQuantity("1,000 meters"), { value: 1000, unit: "m" });
+test("units: 한국어 단위 파싱과 환산", () => {
+  assert.deepEqual(parseQuantity("20도"), { value: 20, unit: "C" });
+  assert.deepEqual(parseQuantity("1,000미터"), { value: 1000, unit: "m" });
+  assert.deepEqual(parseQuantity("70킬로그램"), { value: 70, unit: "kg" });
   assert.ok(Math.abs(convert(5, "mi", "km") - 8.04672) < 1e-9);
   assert.ok(Math.abs(convert(100, "F", "C") - 37.7778) < 1e-3);
   assert.throws(() => convert(1, "kg", "km"));
 });
 
-test("date math is relative to ctx.now", async () => {
+test("날짜 계산은 ctx.now 기준이고 한국어 날짜를 읽는다", async () => {
   const now = "2026-09-24T12:00:00Z";
-  assert.equal(parseDate("March 4", now).toISOString().slice(0, 10), "2026-03-04");
-  assert.deepEqual(parseOffset("10 days before"), { n: 10, unit: "day", sign: -1 });
-  const r = await datemath.run({ date: "March 4", offset: "3 weeks after" }, { now });
+  assert.equal(parseDate("3월 4일", now).toISOString().slice(0, 10), "2026-03-04");
+  assert.equal(parseDate("2026년 12월 25일", now).toISOString().slice(0, 10), "2026-12-25");
+  assert.equal(parseDate("내일", now).toISOString().slice(0, 10), "2026-09-25");
+  assert.deepEqual(parseOffset("10일 전"), { n: 10, unit: "day", sign: -1 });
+  assert.deepEqual(parseOffset("3주 후"), { n: 3, unit: "week", sign: 1 });
+  const r = await TOOL.date_math.run({ date: "3월 4일", offset: "3주 후" }, { now });
   assert.equal(r.data.date, "2026-03-25");
-  // 2026-09-24 is a Thursday: the weekend is days +2 and +3
-  assert.deepEqual(dayIndices("weekend", now), [2, 3]);
+  assert.match(r.observation, /2026년 3월 25일/);
+  // 2026-09-24는 목요일: 주말은 +2, +3
+  assert.deepEqual(weatherDays("weekend", now), [2, 3]);
 });
 
-test("notes: lexical search and the in-memory store", async () => {
-  const n = memoryNotes(["My book club meets on Thursdays at 7pm", "Gym locker code is 4417"]);
-  const hits = searchNotes(await n.all(), "book club");
+test("notes: 한국어 조사를 떼고 검색한다", async () => {
+  const n = memoryNotes(["내 북클럽 모임은 목요일 저녁 7시야", "헬스장 사물함 번호는 4417"]);
+  const hits = searchNotes(await n.all(), "북클럽 모임");
   assert.equal(hits.length, 1);
-  assert.match(hits[0].text, /book club/);
-  const r = await TOOL.note_delete.run({ query: "all notes" }, { notes: n });
+  assert.match(hits[0].text, /북클럽/);
+  const r = await TOOL.note_delete.run({ query: "모든 메모" }, { notes: n });
   assert.equal(r.data.deleted, 2);
 });
 
-test("wikidata: current statements and wikipedia sentences", () => {
+test("wikidata: 최신 statement 선택과 문장 자르기", () => {
   const st = (v, rank = "normal", q = []) => ({ rank, value: { type: "value", content: v }, qualifiers: q, property: { data_type: "string" } });
   const t = (y) => [{ property: { id: "P585" }, value: { content: { time: `+${y}-01-01T00:00:00Z` } } }];
   assert.deepEqual(currentStatements([st("a", "normal", t(2010)), st("b", "normal", t(2020))]).map((s) => s.value.content), ["b"]);
   assert.deepEqual(currentStatements([st("old", "normal", [{ property: { id: "P582" }, value: { content: { time: "+1900" } } }]), st("new")]).map((s) => s.value.content), ["new"]);
   assert.deepEqual(currentStatements([st("x"), st("y", "preferred")]).map((s) => s.value.content), ["y"]);
-  assert.equal(firstSentences("It spans a (1.6 km) strait. It opened in 1937. More.", 2), "It spans a (1.6 km) strait. It opened in 1937.");
+  assert.equal(firstSentences("폭은 1.6 km이다. 1937년에 문을 열었다. 더 있다.", 2), "폭은 1.6 km이다. 1937년에 문을 열었다.");
 });
 
-test("registry: side effects, 12 options, short option texts", () => {
+test("registry: 부작용 도구 3개, 12개 선택지, 짧은 설명", () => {
   assert.equal(TOOLS.length, 12);
   assert.deepEqual(TOOLS.filter((t) => t.sideEffect).map((t) => t.id).sort(), ["note_delete", "note_save", "send_message"]);
-  for (const t of TOOLS) assert.ok(t.whenToUse.split(" ").length <= 18, `${t.id}: whenToUse too long for the shared head`);
+  for (const t of TOOLS) assert.ok(t.whenToUse.split(" ").length <= 18, `${t.id}: whenToUse가 공유 head에 너무 길다`);
   assert.equal(guard("send_message").confirm, true);
   assert.equal(guard("weather").confirm, false);
 });
 
-// ---- extraction and state -------------------------------------------------------------------------------------------
-test("candidates: multi-hop spans from the observation, NONE always offered", () => {
-  const c = extractCandidates(nlp, "What is the population of the country where Kyoto is?", "Kyoto (City in the Kansai region of Japan): Kyoto is the capital city of Kyoto Prefecture.");
-  const ent = slotOptions(TOOL.wikidata_fact.slots[0], c);
-  assert.ok("Japan" in ent);
-  assert.ok(NONE in ent);
-  assert.ok(!Object.keys(ent).some((k) => /[():]/.test(k)), "spans are split at brackets and colons");
-  const calc = slotOptions(TOOL.calculator.slots[0], extractCandidates(nlp, "What's 18% of 2,450?"));
-  assert.ok("18% of 2,450" in calc);
-  const msg = extractCandidates(nlp, "Send Priya a message saying I'll be late");
-  assert.ok("Priya" in slotOptions(TOOL.send_message.slots[0], msg));
-  assert.ok("I'll be late" in slotOptions(TOOL.send_message.slots[1], msg));
-  assert.ok(Object.keys(ent).length <= 20);
+// ---- 한국어 추출과 상태 ---------------------------------------------------------------------------------------------
+test("ko: 조사 분리와 인용문 추출", () => {
+  assert.deepEqual(splitParticle("에펠탑이"), { base: "에펠탑", particle: "이" });
+  assert.deepEqual(splitParticle("파리"), { base: "파리", particle: "" });
+  assert.deepEqual(clauses("내 북클럽 모임은 목요일이라고 기억해줘"), ["내 북클럽 모임은 목요일"]);
+  assert.deepEqual(clauses("프리야에게 늦는다고 메시지 보내줘"), ["늦는다"]);
+  assert.deepEqual(clauses("메모해줘: 우유 사기"), ["우유 사기"]);
+  assert.ok(arithmetic("2,450의 18%는 얼마야?").includes("2,450의 18%"));
+  assert.ok(arithmetic("2의 10제곱은?").includes("2의 10제곱"));
 });
 
-test("state: fixed token budget per field", () => {
-  const long = "word ".repeat(500);
-  const s = buildState("goal", [{ action: "wiki_lookup", args: { topic: "X" }, observation: long }]);
+test("candidates: 목표와 관찰에서 다단계 후보를 찾고 NONE을 항상 넣는다", () => {
+  const c = extractCandidates(nlp, "교토가 있는 나라의 인구는?", "교토는 일본 간사이 지방의 도시이다. 교토시의 인구는 146만 명이다.");
+  const ent = slotOptions(TOOL.wikidata_fact.slots[0], c);
+  assert.ok("일본" in ent, `후보: ${Object.keys(ent).join(" | ")}`);
+  assert.ok(NONE in ent);
+  const calc = slotOptions(TOOL.calculator.slots[0], extractCandidates(nlp, "2,450의 18%는 얼마야?"));
+  assert.ok("2,450의 18%" in calc);
+  const msg = extractCandidates(nlp, "프리야에게 늦는다고 메시지 보내줘");
+  assert.ok("프리야" in slotOptions(TOOL.send_message.slots[0], msg));
+  assert.ok("늦는다" in slotOptions(TOOL.send_message.slots[1], msg));
+  const w = extractCandidates(nlp, "리스본 내일 날씨 알려줘");
+  assert.ok("리스본" in slotOptions(TOOL.weather.slots[0], w));
+  assert.ok(Object.keys(ent).length <= 20);
+  // 처소 조사가 붙은 명사도 장소 후보가 된다
+  assert.ok(nounSpans("파리에서 만나자").some((x) => x.span === "파리" && x.kind === "place"));
+});
+
+test("state: 필드마다 고정 토큰 예산", () => {
+  const long = "단어 ".repeat(500);
+  const s = buildState("목표", [{ action: "wiki_lookup", args: { topic: "X" }, observation: long }]);
   assert.ok(s.last_observation.length < long.length);
   assert.ok(s.last_observation.endsWith("…"));
-  assert.equal(truncateTokens("short", 10), "short");
+  assert.equal(truncateTokens("짧음", 10), "짧음");
   assert.deepEqual(buildState("g").steps_done, []);
 });
 
-// ---- gate -----------------------------------------------------------------------------------------------------------
+// ---- 게이트 ---------------------------------------------------------------------------------------------------------
 const choice = (probs) => { const choice = Object.entries(probs).sort((a, b) => b[1] - a[1])[0][0]; return { type: "choice", choice, probabilities: probs, confidence: 0.1 }; };
 const noul = (p) => ({ type: "noul", noul: p, confidence: Math.max(p, 1 - p) });
 
-test("gate: AUTO when confident, HOLD with reasons otherwise", () => {
-  const base = { next_action: choice({ weather: 0.8, wiki_lookup: 0.2 }), goal_met: noul(0.1), risky: noul(0.1), "arg:place": choice({ Lisbon: 0.9, NONE: 0.1 }), "arg:when": choice({ tomorrow: 0.7, today: 0.3 }) };
+test("gate: 확신하면 AUTO, 아니면 이유와 함께 HOLD", () => {
+  const base = { next_action: choice({ weather: 0.8, wiki_lookup: 0.2 }), goal_met: noul(0.1), risky: noul(0.1), "arg:place": choice({ 리스본: 0.9, NONE: 0.1 }), "arg:when": choice({ tomorrow: 0.7, today: 0.3 }) };
   assert.equal(route(base, { stepIndex: 0 }).route, "AUTO");
-  const none = { ...base, "arg:place": choice({ NONE: 0.9, Paris: 0.1 }) };
+  const none = { ...base, "arg:place": choice({ NONE: 0.9, 파리: 0.1 }) };
   const r = route(none, { stepIndex: 0 });
   assert.equal(r.route, "HOLD");
-  assert.match(r.reasons.join(), /none of the spans/);
+  assert.match(r.reasons.join(), /표현 중 맞는 것이 없음/);
   const low = { ...base, next_action: choice({ weather: 0.25, wiki_lookup: 0.2, calculator: 0.2 }) };
-  assert.match(route(low, { stepIndex: 0 }).reasons.join(), /action score/);
-  // goal met disagreeing with the next action is itself a HOLD signal
-  assert.match(route({ ...base, goal_met: noul(0.9) }, { stepIndex: 1 }, { strictGoalMet: true }).reasons.join(), /goal met/);
-  // by default goal_met owns the stop decision
+  assert.match(route(low, { stepIndex: 0 }).reasons.join(), /행동 점수/);
+  assert.match(route({ ...base, goal_met: noul(0.9) }, { stepIndex: 1 }, { strictGoalMet: true }).reasons.join(), /목표 달성/);
   const stop = route({ ...base, goal_met: noul(0.9) }, { stepIndex: 1 });
   assert.equal(stop.route, "AUTO");
   assert.equal(stop.proposal.action, "FINISH");
-  // loop guard
-  assert.match(route(base, { stepIndex: 1, previous: { action: "weather", args: { place: "Lisbon", when: "tomorrow" } } }).reasons.join(), /loop guard/);
-  // risky goal but a read-only action
-  assert.match(route({ ...base, risky: noul(0.8) }, { stepIndex: 0 }).reasons.join(), /risky/);
+  assert.match(route(base, { stepIndex: 1, previous: { action: "weather", args: { place: "리스본", when: "tomorrow" } } }).reasons.join(), /반복 방지/);
+  assert.match(route({ ...base, risky: noul(0.8) }, { stepIndex: 0 }).reasons.join(), /위험/);
   assert.equal(score(choice({ a: 0.6, b: 0.3, c: 0.1 }), "margin").toFixed(2), "0.30");
 });
 
-// ---- agent loop with a mock System 1 ---------------------------------------------------------------------------------
+// ---- 모의 System 1로 돌린 에이전트 루프 ---------------------------------------------------------------------------
 function mockLaya(script) {
-  // script: per step, { action, p, args: { slot: [value, p] }, goalMet, risky }
+  // script: 단계마다 { action, p, args: { slot: [value, p] }, goalMet, risky }
   let step = -1;
   return {
     async systemOne(state, qs) {
@@ -160,44 +176,44 @@ function mockLaya(script) {
 }
 const fakeTools = { now: "2026-09-24T12:00:00Z", notes: memoryNotes([]) };
 
-test("agent: confident steps run on System 1, the goal is answered", async () => {
-  const laya = mockLaya([{ action: "calculator", p: 0.9, args: { expression: ["18% of 2,450", 0.95] } }, { action: "FINISH", p: 0.9, goalMet: 0.9 }]);
-  const human = { decide: async () => assert.fail("no human needed"), confirm: async () => assert.fail("no confirm needed") };
-  const run = await runAgent("What's 18% of 2,450?", { laya, nlp, human, toolCtx: fakeTools });
+test("agent: 확신하는 단계는 System 1이 실행하고 목표에 답한다", async () => {
+  const laya = mockLaya([{ action: "calculator", p: 0.9, args: { expression: ["2,450의 18%", 0.95] } }, { action: "FINISH", p: 0.9, goalMet: 0.9 }]);
+  const human = { decide: async () => assert.fail("사람이 필요 없어야 한다"), confirm: async () => assert.fail("확인이 필요 없어야 한다") };
+  const run = await runAgent("2,450의 18%는 얼마야?", { laya, nlp, human, toolCtx: fakeTools });
   assert.equal(run.outcome.kind, "answered");
   assert.match(run.outcome.text, /441/);
   assert.deepEqual(run.steps.map((s) => s.decidedBy), ["S1", "S1"]);
 });
 
-test("agent: HOLD goes to System 2, or to the person when there is none", async () => {
+test("agent: HOLD는 System 2로, 없으면 사람으로 간다", async () => {
   const script = [{ action: "wikidata_fact", p: 0.9, args: { entity: [NONE, 0.8], property: ["height", 0.9] } }, { action: "FINISH", p: 0.9, goalMet: 0.9 }];
-  const s2 = { ready: () => true, decide: async () => ({ action: "calculator", args: { expression: "2+2" }, reason: "test", ms: 1 }) };
+  const s2 = { ready: () => true, decide: async () => ({ action: "calculator", args: { expression: "2+2" }, reason: "테스트", ms: 1 }) };
   const human = { decide: async () => ({ action: "calculator", args: { expression: "3+3" } }), confirm: async () => true };
-  const a = await runAgent("How tall is that iron tower in Paris?", { laya: mockLaya(script), nlp, human, s2, toolCtx: fakeTools });
+  const a = await runAgent("파리에 있는 그 철탑은 얼마나 높아?", { laya: mockLaya(script), nlp, human, s2, toolCtx: fakeTools });
   assert.equal(a.steps[0].decidedBy, "S2");
   assert.equal(a.steps[0].s2.agreedWithS1, false);
-  const b = await runAgent("How tall is that iron tower in Paris?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools });
+  const b = await runAgent("파리에 있는 그 철탑은 얼마나 높아?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools });
   assert.equal(b.steps[0].decidedBy, "human");
   assert.match(b.outcome.text, /= 6/);
 });
 
-test("agent: tools that change something need the user's OK; refusing stops the run", async () => {
-  const script = [{ action: "send_message", p: 0.95, args: { to: ["Priya", 0.9], text: ["I'll be late", 0.9] }, risky: 0.9 }, { action: "FINISH", p: 0.9, goalMet: 0.9 }];
+test("agent: 무언가를 바꾸는 도구는 승인이 필요하고, 거부하면 멈춘다", async () => {
+  const script = [{ action: "send_message", p: 0.95, args: { to: ["프리야", 0.9], text: ["늦는다", 0.9] }, risky: 0.9 }, { action: "FINISH", p: 0.9, goalMet: 0.9 }];
   let asked = 0;
-  const refuse = await runAgent("Send Priya a message saying I'll be late", { laya: mockLaya(script), nlp, human: { decide: async () => null, confirm: async () => { asked++; return false; } }, toolCtx: fakeTools });
+  const refuse = await runAgent("프리야에게 늦는다고 메시지 보내줘", { laya: mockLaya(script), nlp, human: { decide: async () => null, confirm: async () => { asked++; return false; } }, toolCtx: fakeTools });
   assert.equal(asked, 1);
   assert.equal(refuse.outcome.kind, "refused");
   assert.equal(refuse.steps[0].guard.allowed, false);
-  const allow = await runAgent("Send Priya a message saying I'll be late", { laya: mockLaya(script), nlp, human: { decide: async () => null, confirm: async () => true }, toolCtx: fakeTools });
+  const allow = await runAgent("프리야에게 늦는다고 메시지 보내줘", { laya: mockLaya(script), nlp, human: { decide: async () => null, confirm: async () => true }, toolCtx: fakeTools });
   assert.equal(allow.outcome.kind, "answered");
-  assert.match(allow.outcome.text, /nothing was actually sent/);
+  assert.match(allow.outcome.text, /실제로 전송되지 않았습니다/);
 });
 
-test("agent: what-if replay reuses the prefix and forces the action", async () => {
-  const script = [{ action: "calculator", p: 0.9, args: { expression: ["18% of 2,450", 0.95] } }, { action: "FINISH", p: 0.9, goalMet: 0.9 }];
+test("agent: what-if 재실행은 앞 단계를 그대로 쓰고 행동을 강제한다", async () => {
+  const script = [{ action: "calculator", p: 0.9, args: { expression: ["2,450의 18%", 0.95] } }, { action: "FINISH", p: 0.9, goalMet: 0.9 }];
   const human = { decide: async () => null, confirm: async () => true };
-  const first = await runAgent("What's 18% of 2,450?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools });
-  const again = await runAgent("What's 18% of 2,450?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools }, { prefix: first.steps.slice(0, 1), force: { action: "FINISH" } });
+  const first = await runAgent("2,450의 18%는 얼마야?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools });
+  const again = await runAgent("2,450의 18%는 얼마야?", { laya: mockLaya(script), nlp, human, toolCtx: fakeTools }, { prefix: first.steps.slice(0, 1), force: { action: "FINISH" } });
   assert.equal(again.steps[0].replayed, true);
   assert.equal(again.steps[1].action, "FINISH");
   assert.equal(again.steps[1].s1.answers.next_action.forced, true);
@@ -206,38 +222,38 @@ test("agent: what-if replay reuses the prefix and forces the action", async () =
   assert.match(toTurtle(compactRun(first)), /la:decidedBy la:S1/);
 });
 
-test("agent: a repeated identical call is not run again; the agent finishes", async () => {
-  const script = [{ action: "calculator", p: 0.2, args: { expression: ["18% of 2,450", 0.95] } }, { action: "calculator", p: 0.2, args: { expression: ["18% of 2,450", 0.95] } }];
-  const s2 = { ready: () => true, decide: async () => ({ action: "calculator", args: { expression: "18% of 2,450" }, reason: "", ms: 1 }) };
-  const run = await runAgent("What's 18% of 2,450?", { laya: mockLaya(script), nlp, s2, human: { decide: async () => null, confirm: async () => true }, toolCtx: fakeTools });
+test("agent: 똑같은 호출은 다시 하지 않고 지금까지 찾은 것으로 끝난다", async () => {
+  const script = [{ action: "calculator", p: 0.2, args: { expression: ["2,450의 18%", 0.95] } }, { action: "calculator", p: 0.2, args: { expression: ["2,450의 18%", 0.95] } }];
+  const s2 = { ready: () => true, decide: async () => ({ action: "calculator", args: { expression: "2,450의 18%" }, reason: "", ms: 1 }) };
+  const run = await runAgent("2,450의 18%는 얼마야?", { laya: mockLaya(script), nlp, s2, human: { decide: async () => null, confirm: async () => true }, toolCtx: fakeTools });
   assert.equal(run.steps.length, 2);
   assert.equal(run.steps[1].action, "FINISH");
   assert.ok(run.steps[1].repeatOf);
   assert.match(run.outcome.text, /441/);
 });
 
-// ---- gold matching and metrics ----------------------------------------------------------------------------------------
-test("gold: alternatives, numeric expressions, quantities", () => {
-  assert.ok(argMatch("expression", "0.18 * 2450", "18% of 2,450"));
-  assert.ok(argMatch("quantity", "330 meters", "330 m"));
+// ---- 정답 매칭과 지표 ----------------------------------------------------------------------------------------------
+test("gold: 대안, 식의 값, 수량 비교", () => {
+  assert.ok(argMatch("expression", "0.18 * 2450", "2,450의 18%"));
+  assert.ok(argMatch("quantity", "330미터", "330 m"));
   assert.ok(argMatch("entity", "Apple Inc", ["Apple Inc.", "Apple"]));
-  assert.ok(!argMatch("entity", NONE, "Japan"));
-  assert.equal(goldOption("entity", { Kyoto: null, Japan: null, NONE: "x" }, "Japan"), "Japan");
-  assert.equal(goldOption("entity", { Paris: null, NONE: "x" }, "Eiffel Tower"), NONE);
-  const step = { action: "wiki_lookup", args: { topic: "Kyoto" }, alt: [{ action: "wikidata_fact", args: { entity: "Kyoto", property: "country" } }] };
-  assert.ok(matchStep(step, { action: "wikidata_fact", args: { entity: "Kyoto", property: "country" } }).ok);
-  assert.ok(!matchStep(step, { action: "wikidata_fact", args: { entity: "Kyoto", property: "capital" } }).ok);
+  assert.ok(!argMatch("entity", NONE, "일본"));
+  assert.equal(goldOption("entity", { 교토: null, 일본: null, NONE: "x" }, "일본"), "일본");
+  assert.equal(goldOption("entity", { 파리: null, NONE: "x" }, "에펠탑"), NONE);
+  const step = { action: "wiki_lookup", args: { topic: "교토" }, alt: [{ action: "wikidata_fact", args: { entity: "교토", property: "country" } }] };
+  assert.ok(matchStep(step, { action: "wikidata_fact", args: { entity: "교토", property: "country" } }).ok);
+  assert.ok(!matchStep(step, { action: "wikidata_fact", args: { entity: "교토", property: "capital" } }).ok);
 });
 
 function rec(task, stepI, gold, s1, extra = {}) {
   return { task, split: extra.split || "test", category: extra.category || "calc", step: stepI, goal: "g", gold, sideEffect: !!extra.sideEffect, s1: { answers: s1, gold: { answers: s1, options: extra.options || {} }, ms: 10 }, ...(extra.s2 ? { s2: { ...extra.s2, ms: 100 } } : {}) };
 }
 
-test("metrics: split, auto-step error, task success for each router", () => {
+test("metrics: 분담률, 자동 단계 오류, 라우터별 과제 성공률", () => {
   const good = { next_action: choice({ calculator: 0.9, FINISH: 0.1 }), goal_met: noul(0.1), risky: noul(0.1), "arg:expression": choice({ "2+2": 0.9, NONE: 0.1 }) };
   const fin = { next_action: choice({ FINISH: 0.9, calculator: 0.1 }), goal_met: noul(0.9), risky: noul(0.1) };
   const unsure = { next_action: choice({ calculator: 0.2, wiki_lookup: 0.19, weather: 0.18 }), goal_met: noul(0.1), risky: noul(0.1), "arg:expression": choice({ "2+2": 0.9, NONE: 0.1 }) };
-  const wrong = { next_action: choice({ weather: 0.9, calculator: 0.1 }), goal_met: noul(0.1), risky: noul(0.1), "arg:place": choice({ Paris: 0.9, NONE: 0.1 }), "arg:when": choice({ today: 0.9, tomorrow: 0.1 }) };
+  const wrong = { next_action: choice({ weather: 0.9, calculator: 0.1 }), goal_met: noul(0.1), risky: noul(0.1), "arg:place": choice({ 파리: 0.9, NONE: 0.1 }), "arg:when": choice({ today: 0.9, tomorrow: 0.1 }) };
   const g1 = { action: "calculator", args: { expression: "2+2" } }, gF = { action: "FINISH", args: {} };
   const s2ok = { action: "calculator", args: { expression: "2 + 2" } };
   const records = [
@@ -246,54 +262,55 @@ test("metrics: split, auto-step error, task success for each router", () => {
     rec("c", 0, g1, wrong, { s2: s2ok }), rec("c", 1, gF, fin, { s2: gF }),
   ];
   const e = evaluate(records, { tauAction: 0.3, tauArg: 0.5 });
-  assert.equal(e.split.autoN, 5);           // "unsure" is held
-  assert.equal(e.autoError, 1 / 5);          // "wrong" runs automatically and is wrong
-  assert.equal(e.routers.s1.rate, 2 / 3);    // no gate: b and a right (b's argmax is calculator), c wrong
+  assert.equal(e.split.autoN, 5);
+  assert.equal(e.autoError, 1 / 5);
+  assert.equal(e.routers.s1.rate, 2 / 3);
   assert.equal(e.routers.hybrid.rate, 2 / 3);
   assert.equal(e.routers.s2.rate, 1);
-  assert.equal(e.escalationPrecision, 0);    // the held step was actually right
+  assert.equal(e.escalationPrecision, 0);
   const t = taskResults(records, { tauAction: 0.3, tauArg: 0.5 }, "hybrid");
   assert.deepEqual(t.map((x) => x.s2), [0, 1, 0]);
   assert.ok(tuneOnDev(records.map((r) => ({ ...r, split: "dev" })), {}, 0.5));
 });
 
-// ---- task suite and recordings ---------------------------------------------------------------------------------------
-test("tasks.json: valid gold traces", () => {
-  assert.ok(tasks.tasks.length >= 100);
+// ---- 과제 세트와 녹음 -----------------------------------------------------------------------------------------------
+test("tasks.json: 정답 트레이스가 유효하다", () => {
+  assert.ok(tasks.tasks.length >= 60);
   for (const t of tasks.tasks) {
-    assert.equal(t.steps.at(-1).action, "FINISH", `${t.id} must end with FINISH`);
+    assert.ok(t.goal.length > 0, `${t.id}: 목표 없음`);
+    assert.equal(t.steps.at(-1).action, "FINISH", `${t.id}: FINISH로 끝나야 한다`);
     for (const s of t.steps) {
-      assert.ok(TOOL[s.action], `${t.id}: unknown action ${s.action}`);
+      assert.ok(TOOL[s.action], `${t.id}: 알 수 없는 행동 ${s.action}`);
       for (const slot of TOOL[s.action].slots) {
         const v = s.args[slot.name];
-        assert.ok(v != null, `${t.id}: ${s.action} is missing ${slot.name}`);
-        if (slot.fixed) assert.ok(v in slot.fixed, `${t.id}: ${slot.name}=${v} is not an option`);
+        assert.ok(v != null, `${t.id}: ${s.action}에 ${slot.name}이(가) 없다`);
+        if (slot.fixed) assert.ok((Array.isArray(v) ? v[0] : v) in slot.fixed, `${t.id}: ${slot.name}=${v}는 선택지가 아니다`);
       }
-      if (s.action !== "FINISH") assert.ok(s.observation && !/failed:/.test(s.observation), `${t.id}: ${s.action} has no good recorded observation`);
+      if (s.action !== "FINISH") assert.ok(s.observation && !/실패:/.test(s.observation), `${t.id}: ${s.action}에 좋은 관찰 결과가 없다`);
     }
   }
   const sides = tasks.tasks.filter((t) => t.steps.some((s) => isSideEffect(s.action)));
-  assert.ok(sides.length >= 10);
+  assert.ok(sides.length >= 6);
   assert.ok(tasks.tasks.some((t) => t.split === "dev") && tasks.tasks.some((t) => t.split === "test"));
 });
 
-test("questions fit Laya's head: every option gets a marker", () => {
+test("질문이 Laya의 head에 들어간다: 모든 선택지에 마커가 생긴다", () => {
   const q = actionQuestions();
   assert.equal(Object.keys(q.next_action.criteria).length, 12);
   const a = argQuestions(TOOL.wikidata_fact, []);
   assert.equal(Object.keys(a["arg:property"].criteria).length, 11);
 });
 
-test("system 2: reply parsing and schema", () => {
-  const r = parseReply('{"action":"unit_convert","args":{"quantity":"5 miles","to_unit":"kilometers","extra":"x"},"reason":"r"}');
-  assert.deepEqual(r.args, { quantity: "5 miles", to_unit: "km" });
+test("System 2: 응답 파싱과 스키마", () => {
+  const r = parseReply('{"action":"unit_convert","args":{"quantity":"5마일","to_unit":"킬로미터","extra":"x"},"reason":"r"}');
+  assert.deepEqual(r.args, { quantity: "5마일", to_unit: "km" });
   assert.deepEqual(STEP_SCHEMA.properties.action.enum, TOOLS.map((t) => t.id));
   assert.throws(() => parseReply("no json here"));
 });
 
-test("recorded.json matches the current questions and suite", () => {
+test("recorded.json이 현재 질문·과제와 맞는다", () => {
   const p = new URL("../web/recorded.json", import.meta.url);
   if (!fs.existsSync(p)) return;
   const r = JSON.parse(fs.readFileSync(p, "utf8"));
-  if (r.eval?.meta?.questions) assert.equal(r.eval.meta.questions, questionsKey(tasks.tasks), "questions or tasks changed: re-record the evaluation (see README)");
+  if (r.eval?.meta?.questions) assert.equal(r.eval.meta.questions, questionsKey(tasks.tasks), "질문이나 과제가 바뀌었다: 평가를 다시 녹음해야 한다 (README 참고)");
 });

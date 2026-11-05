@@ -320,3 +320,6 @@ dialog .guardtxt { border: 1px solid var(--block); background: var(--block-soft)
 .curve { width: 100%; height: auto; }
 .curve .pt { cursor: pointer; }
 .curve text { fill: var(--ink2); font-size: 11px; }
+
+/* 한국어판 */
+.brand h1 .ko { font-size: 0.52em; font-weight: 500; color: var(--ink2); letter-spacing: 0; vertical-align: middle; }

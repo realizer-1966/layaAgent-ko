@@ -1,8 +1,13 @@
 // Agent memory: note_save / note_search / note_delete over ctx.notes (IndexedDB in the page, a Map in tests and in
 // the evaluation, where each task seeds its own notes). Search is lexical (content-word overlap), so no second model.
+// 한국어판: 조사를 떼고 내용어만 비교한다 (ko.js의 koWords).
+import { koWords } from "../ko.js";
 
-const STOP = new Set("a an the my our your his her their is are was were be on in at of to for and or with about what when where who which how do does did i me we you it that this these those any all some please note notes remember".split(" "));
-export const words = (s) => String(s || "").toLowerCase().replace(/'s\b/g, "").match(/[a-z0-9]+/g)?.filter((w) => !STOP.has(w)).map((w) => w.replace(/(?<=\w{3})s$/, "")) || [];
+export const words = (s) => {
+  const ko = koWords(s);
+  if (ko.length) return ko;
+  return String(s || "").toLowerCase().replace(/'s\b/g, "").match(/[a-z0-9]+/g)?.map((w) => w.replace(/(?<=\w{3})s$/, "")) || [];
+};
 
 export function scoreNote(query, text) {
   const q = new Set(words(query)), t = new Set(words(text));
@@ -28,37 +33,37 @@ export function memoryNotes(seed = []) {
 
 export const noteSave = {
   id: "note_save",
-  whenToUse: "Save something the user asks to remember for later",
-  sideEffect: "saves a note in this browser",
-  slots: [{ name: "text", kinds: ["clause"], instruction: "What exactly should be saved as a note?", none: "None of these is what should be saved" }],
+  whenToUse: "사용자가 나중에 기억해 달라고 한 내용을 메모로 저장한다",
+  sideEffect: "이 브라우저에 메모를 저장합니다",
+  slots: [{ name: "text", kinds: ["clause"], instruction: "정확히 무엇을 메모로 저장해야 하는가?", none: "이 중에는 저장할 내용이 없음" }],
   async run({ text }, ctx) {
     await ctx.notes.add(text);
-    return { observation: `Saved the note: "${text}"`, answer: `Saved: "${text}"`, data: { text } };
+    return { observation: `메모를 저장했습니다: "${text}"`, answer: `저장했습니다: "${text}"`, data: { text } };
   },
 };
 
 export const noteSearch = {
   id: "note_search",
-  whenToUse: "Search the user's saved notes for something they told you before",
-  slots: [{ name: "query", kinds: ["noun", "topic", "proper"], instruction: "What should the saved notes be searched for?", none: "None of these is what to search for" }],
+  whenToUse: "예전에 사용자가 말한 내용을 저장된 메모에서 찾는다",
+  slots: [{ name: "query", kinds: ["noun", "topic", "proper", "person"], instruction: "저장된 메모에서 무엇을 찾아야 하는가?", none: "이 중에는 찾을 것이 없음" }],
   async run({ query }, ctx) {
     const hits = searchNotes(await ctx.notes.all(), query);
-    if (!hits.length) return { observation: `No saved note mentions "${query}".`, answer: `No saved note mentions "${query}".`, data: { hits: [] }, ok: false };
-    const out = `Notes about "${query}": ${hits.map((h) => `"${h.text}"`).join("; ")}`;
-    return { observation: out, answer: `From your notes: ${hits.map((h) => `"${h.text}"`).join("; ")}`, data: { hits: hits.map((h) => h.text) } };
+    if (!hits.length) return { observation: `"${query}"에 대해 저장된 메모가 없습니다.`, answer: `"${query}"에 대한 메모가 없습니다.`, data: { hits: [] }, ok: false };
+    const out = `"${query}" 관련 메모: ${hits.map((h) => `"${h.text}"`).join("; ")}`;
+    return { observation: out, answer: `메모에서 찾았습니다: ${hits.map((h) => `"${h.text}"`).join("; ")}`, data: { hits: hits.map((h) => h.text) } };
   },
 };
 
 export const noteDelete = {
   id: "note_delete",
-  whenToUse: "Delete saved notes the user no longer wants",
-  sideEffect: "permanently deletes saved notes",
-  slots: [{ name: "query", kinds: ["noun", "topic", "proper"], extra: ["all notes"], instruction: "Which saved notes should be deleted?", none: "None of these says which notes to delete" }],
+  whenToUse: "사용자가 더 이상 원하지 않는 저장된 메모를 지운다",
+  sideEffect: "저장된 메모를 영구히 삭제합니다",
+  slots: [{ name: "query", kinds: ["noun", "topic", "proper", "person"], extra: ["모든 메모"], instruction: "어떤 메모를 지워야 하는가?", none: "이 중에는 지울 메모를 가리키는 것이 없음" }],
   async run({ query }, ctx) {
     const all = await ctx.notes.all();
-    const gone = /^all( notes)?$/i.test(query.trim()) ? all : searchNotes(all, query, 50);
+    const gone = /^(?:all( notes)?|모든 메모|전부|전체)$/i.test(query.trim()) ? all : searchNotes(all, query, 50);
     await ctx.notes.remove(gone.map((n) => n.id));
-    const out = gone.length ? `Deleted ${gone.length} note${gone.length > 1 ? "s" : ""}: ${gone.map((n) => `"${n.text}"`).join("; ")}` : `No saved note matched "${query}", nothing deleted.`;
+    const out = gone.length ? `메모 ${gone.length}개를 지웠습니다: ${gone.map((n) => `"${n.text}"`).join("; ")}` : `"${query}"에 맞는 메모가 없어 아무것도 지우지 않았습니다.`;
     return { observation: out, answer: out, data: { deleted: gone.length } };
   },
 };

@@ -1,15 +1,18 @@
 // Loads the Laya typed-decisions ONNX model in the browser. Adapted from layaForWeb's web/app.js loadModel().
 //
-// The weights live on Hugging Face (VishalMysore/layaForWebTrained): a small ONNX graph plus the external-data
-// file split into 24 MiB parts listed in manifest.json. Parts are cached in Cache Storage keyed by the file hash,
+// 한국어판: the weights live on the GitHub Pages mirror of convaiinnovations/laya-multilingual (mmBERT, 100+ languages,
+// 322M parameters): a small ONNX graph plus the external-data file split into 24 MiB parts listed in manifest.json.
+// (The upstream English build is VishalMysore/layaForWebTrained; ?modelBase= still overrides either.) Parts are
+// cached in Cache Storage keyed by the file hash,
 // so a repeat visit (or a visit to the layaForWeb demo with the same build) skips the download.
 // Override the location with ?modelBase=https://.../ (the host must send CORS headers).
 import * as ort from "./vendor/ort.min.mjs";
 import { Tokenizer } from "./vendor/tokenizers.min.mjs";
 import { Laya } from "./laya-core.js";
 
-export const DEFAULT_MODEL_BASE = "https://huggingface.co/VishalMysore/layaForWebTrained/resolve/main/";
-export const MODEL_PAGE = "https://huggingface.co/VishalMysore/layaForWebTrained";
+export const DEFAULT_MODEL_BASE = "https://realizer-1966.github.io/laya-web-ko/model-multilingual/";
+export const MODEL_PAGE = "https://huggingface.co/convaiinnovations/laya-multilingual";
+export const MODEL_LABEL = "convaiinnovations/laya-multilingual";
 
 export function modelBase() {
   const q = new URLSearchParams(location.search).get("modelBase");
@@ -86,6 +89,7 @@ export async function loadLaya(opts) {
   const status = opts.onStatus || (() => {}), progress = opts.onProgress || (() => {});
 
   // ONNX Runtime's WebGPU MatMulNBits kernel supports 2- and 4-bit weights only, so the int8 build is WASM-only.
+  // The multilingual checkpoint ships a single int8 build (q8e8) on purpose: it is the one that runs everywhere.
   const gpu = await hasWebGPU();
   const int8 = key === "q8e8";
   let backend = opts.backend || "auto";

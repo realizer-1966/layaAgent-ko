@@ -9,7 +9,7 @@ import { TOOL, FINISH, isSideEffect } from "./tools/index.js";
 import { ARG_PREFIX } from "./questions.js";
 import { NONE } from "./candidates.js";
 
-export const METRICS = { prob: "p(chosen option)", margin: "margin over the runner-up", entropy: "1 − normalized entropy" };
+export const METRICS = { prob: "고른 선택지의 확률 p", margin: "2위와의 차이(margin)", entropy: "1 − 정규화 엔트로피" };
 
 export const DEFAULTS = {
   metric: "prob",
@@ -63,23 +63,23 @@ export function route(answers, ctx = {}, opts = {}) {
   const sa = score(answers.next_action, o.metric);
   if (p.action === FINISH && p.picked !== FINISH) {
     // the stop decision came from the goal_met question (next_action barely reads the steps done: see README)
-    if (p.goalMet < o.tauStop) reasons.push(`stop score ${p.goalMet.toFixed(2)} < ${o.tauStop.toFixed(2)}`);
-    if (o.strictGoalMet) reasons.push(`goal met (p ${p.goalMet.toFixed(2)}) but next action is ${p.picked}`);
+    if (p.goalMet < o.tauStop) reasons.push(`멈춤 점수 ${p.goalMet.toFixed(2)} < ${o.tauStop.toFixed(2)}`);
+    if (o.strictGoalMet) reasons.push(`목표 달성(p ${p.goalMet.toFixed(2)})이라고 했지만 다음 행동은 ${p.picked}`);
   } else {
-    if (sa < o.tauAction) reasons.push(`action score ${sa.toFixed(2)} < ${o.tauAction.toFixed(2)}`);
+    if (sa < o.tauAction) reasons.push(`행동 점수 ${sa.toFixed(2)} < ${o.tauAction.toFixed(2)}`);
     for (const slot of TOOL[p.action]?.slots || []) {
       const a = answers[ARG_PREFIX + slot.name];
-      if (!a) { reasons.push(`no answer for ${slot.name}`); continue; }
-      if (a.choice === NONE) reasons.push(a.noCandidates ? `${slot.name}: no candidate span in the text` : `${slot.name}: none of the spans fits`);
-      else { const s = score(a, o.metric); if (s < o.tauArg) reasons.push(`${slot.name} score ${s.toFixed(2)} < ${o.tauArg.toFixed(2)}`); }
+      if (!a) { reasons.push(`${slot.name}에 대한 답이 없음`); continue; }
+      if (a.choice === NONE) reasons.push(a.noCandidates ? `${slot.name}: 본문에 후보 표현이 없음` : `${slot.name}: 주어진 표현 중 맞는 것이 없음`);
+      else { const s = score(a, o.metric); if (s < o.tauArg) reasons.push(`${slot.name} 점수 ${s.toFixed(2)} < ${o.tauArg.toFixed(2)}`); }
     }
-    if (o.useGoalMet && step > 0 && p.picked === FINISH && p.goalMet < o.goalCutoff) reasons.push(`FINISH picked but goal not met (p ${p.goalMet.toFixed(2)})`);
+    if (o.useGoalMet && step > 0 && p.picked === FINISH && p.goalMet < o.goalCutoff) reasons.push(`FINISH를 골랐지만 목표 미달(p ${p.goalMet.toFixed(2)})`);
   }
-  if (step === 0 && p.action === FINISH) reasons.push("FINISH before any step");
-  if (o.useRisk && p.risky >= o.riskCutoff && !isSideEffect(p.action) && p.action !== "ask_user" && p.action !== FINISH) reasons.push(`goal looks risky (p ${p.risky.toFixed(2)}) but ${p.action} is read-only`);
+  if (step === 0 && p.action === FINISH) reasons.push("아무 단계도 하기 전에 FINISH");
+  if (o.useRisk && p.risky >= o.riskCutoff && !isSideEffect(p.action) && p.action !== "ask_user" && p.action !== FINISH) reasons.push(`목표가 위험해 보이는데(p ${p.risky.toFixed(2)}) ${p.action}는 읽기 전용`);
   if (ctx.previous && ctx.previous.action === p.action && p.action !== FINISH) {
-    if (sameArgs(ctx.previous.args, p.args)) reasons.push("same call as the previous step (loop guard)");
-    else if (o.holdRepeat) reasons.push(`same tool as the previous step (${p.action})`);
+    if (sameArgs(ctx.previous.args, p.args)) reasons.push("직전 단계와 똑같은 호출 (반복 방지)");
+    else if (o.holdRepeat) reasons.push(`직전 단계와 같은 도구 (${p.action})`);
   }
   return { route: reasons.length ? "HOLD" : "AUTO", reasons, proposal: p, actionScore: sa };
 }

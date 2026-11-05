@@ -1,4 +1,5 @@
-// Laya (English) in the browser: sequence builder, ONNX Runtime Web inference, calibrated outputs.
+// Laya in the browser (한국어판: 다국어 체크포인트 <bos>/<eos>/<pad>/<mask> 토큰 지원):
+// sequence builder, ONNX Runtime Web inference, calibrated outputs.
 // This is a line-by-line port of laya/common.py (build_sequence) and laya/agent.py (system_one).
 //
 // Derived from Laya by ConvAI Innovations (https://github.com/NandhaKishorM/laya), licensed under the
@@ -41,9 +42,22 @@ export function renderOptions(q) {
   ];
 }
 
+/**
+ * Special tokens of whichever checkpoint is loaded. The English checkpoints (ModernBERT) use [CLS]/[SEP]/[MASK]/[PAD];
+ * the multilingual one (mmBERT, convaiinnovations/laya-multilingual) uses <bos>/<eos>/<mask>/<pad>.
+ * Reading them from the tokenizer config instead of hard-coding one family is what lets the same page run both.
+ */
 export function specialIds(tok) {
-  const g = (t) => tok.token_to_id(t);
-  return { cls: g("[CLS]"), sep: g("[SEP]"), mask: g("[MASK]"), pad: g("[PAD]") };
+  const pick = (...names) => {
+    for (const n of names) { const id = tok.token_to_id(n); if (id !== undefined && id !== null && id >= 0) return id; }
+    throw new Error(`tokenizer has none of ${names.join(" / ")}`);
+  };
+  return {
+    cls: pick("<bos>", "[CLS]"),
+    sep: pick("<eos>", "[SEP]"),
+    mask: pick("<mask>", "[MASK]"),
+    pad: pick("<pad>", "[PAD]"),
+  };
 }
 
 export function buildSequence(tok, sp, state, q, maxLen = 512, headMaxLen = 192) {
@@ -163,6 +177,6 @@ export class Laya {
         answers[qid] = { type: "noul", noul: r4(p[1]), confidence: r4(Math.max(p[1], 1 - p[1])) };
       }
     });
-    return { model: "laya-en-onnx-web", answers, usage: { input_tokens: b.att.reduce((a, v) => a + Number(v), 0), output_tokens: 0 }, latency_ms: ms };
+    return { model: `laya-${this.cfg.encoder ? this.cfg.encoder.split("/").pop() : "onnx"}-onnx-web`, answers, usage: { input_tokens: b.att.reduce((a, v) => a + Number(v), 0), output_tokens: 0 }, latency_ms: ms };
   }
 }
