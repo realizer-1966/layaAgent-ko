@@ -1,9 +1,9 @@
 {
-  "name": "laya-as-agentic-guard",
+  "name": "laya-agent-ko",
   "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
-  "description": "layaAgent: a browser-native AI agent where the Laya typed-decision encoder (System 1) makes the routine decisions, an in-browser WebLLM model (System 2) takes over only when Laya is unsure, and risky steps are guarded by a confirmation gate",
+  "description": "layaAgent 한국어판: Laya 다국어 타입화 결정 인코더(System 1)가 일상적인 결정을 하고, 확신이 없을 때만 브라우저 속 WebLLM(System 2)이 나서며, 위험한 단계는 확인 게이트로 막는 브라우저 네이티브 AI 에이전트",
   "type": "module",
   "scripts": {
     "test": "node --test tests/*.test.mjs",

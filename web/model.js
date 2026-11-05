@@ -65,10 +65,10 @@ async function fetchParts(base, entry, onProgress) {
       bytes = await fetchBytes(url, (got) => onProgress(off + got, entry.size));
       try { if (cache) await cache.put(url, new Response(bytes)); } catch { /* quota exceeded: fine */ }
     }
-    if (off + bytes.length > entry.size) throw new Error("weights are larger than the manifest says");
+    if (off + bytes.length > entry.size) throw new Error("가중치가 매니페스트보다 큽니다");
     out.set(bytes, off); off += bytes.length; onProgress(off, entry.size);
   }
-  if (off !== entry.size) throw new Error(`weights incomplete: got ${off} of ${entry.size} bytes`);
+  if (off !== entry.size) throw new Error(`가중치가 불완전합니다: ${off} / ${entry.size} 바이트`);
   return { data: out, fromCache };
 }
 
@@ -85,7 +85,7 @@ export async function loadLaya(opts) {
   const manifest = opts.manifest || await fetchManifest(base);
   const key = opts.variant || "q8e8";
   const v = manifest.variants[key];
-  if (!v) throw new Error(`unknown build "${key}"`);
+  if (!v) throw new Error(`알 수 없는 빌드 "${key}"`);
   const status = opts.onStatus || (() => {}), progress = opts.onProgress || (() => {});
 
   // ONNX Runtime's WebGPU MatMulNBits kernel supports 2- and 4-bit weights only, so the int8 build is WASM-only.
@@ -102,7 +102,7 @@ export async function loadLaya(opts) {
   const want = Number(new URLSearchParams(location.search).get("threads")) || 4;
   ort.env.wasm.numThreads = self.crossOriginIsolated ? Math.max(1, Math.min(want, navigator.hardwareConcurrency || 2)) : 1;
 
-  status("Loading tokenizer and config…"); progress(0);
+  status("토크나이저와 설정을 불러오는 중…"); progress(0);
   const [tj, tc, cfg] = await Promise.all(["tokenizer.json", "tokenizer_config.json", "rl_agent_config.json"].map((f) =>
     fetch(base + f).then((r) => { if (!r.ok) throw new Error(`${f}: HTTP ${r.status}`); return r.json(); })));
   const tokenizer = new Tokenizer(tj, tc);
@@ -111,11 +111,11 @@ export async function loadLaya(opts) {
   const graph = await fetchBytes(base + v.onnx);
   const { data, fromCache } = await fetchParts(base, v.data, (got, total) => {
     progress(total ? got / total : null);
-    status(`Downloading weights: ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} MB`);
+    status(`가중치 내려받는 중: ${(got / 1048576).toFixed(0)} / ${(total / 1048576).toFixed(0)} MB`);
   });
   const dlMs = performance.now() - t0;
 
-  status("Creating inference session (first time can take a while)…"); progress(null);
+  status("추론 세션을 만드는 중 (처음에는 오래 걸릴 수 있습니다)…"); progress(null);
   const t1 = performance.now();
   const session = await ort.InferenceSession.create(graph, {
     executionProviders: backend === "webgpu" ? ["webgpu", "wasm"] : ["wasm"],
@@ -128,9 +128,9 @@ export async function loadLaya(opts) {
   const run = laya.systemOne.bind(laya);
   let queue = Promise.resolve();
   laya.systemOne = (state, questions) => { const p = queue.then(() => run(state, questions)); queue = p.catch(() => {}); return p; };
-  status("Warming up…");
+  status("워밍업 중…");
   const w0 = performance.now();
-  await laya.systemOne("warm up", { w: { type: "noul", instructions: "This is a warm-up call" } });
+  await laya.systemOne("warm up", { w: { type: "noul", instructions: "워밍업 호출입니다" } });
   return {
     laya, backend,
     info: {

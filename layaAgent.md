@@ -1,3 +1,5 @@
+> **한국어판 안내.** 이 문서는 원본 설계 사양(영어)입니다. 한국어판의 구현 차이(다국어 체크포인트, 한국어 후보 추출기, 68과제 한국어 세트)는 [README-ko.md](README-ko.md)와 [docs/article-ko.md](docs/article-ko.md)에 정리되어 있습니다. 아래 본문에서 언급하는 영어 체크포인트·영어 과제·측정값은 원본 기준입니다.
+
 # layaAgent
 
 **An AI agent that runs entirely in a browser tab. A 421M encoder makes the fast decisions, a small in-browser LLM steps in only when the encoder is unsure, and every step is drawn as a graph you can click through.**

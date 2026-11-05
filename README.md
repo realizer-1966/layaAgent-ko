@@ -1,3 +1,5 @@
+> **한국어판 안내.** 이 저장소는 [layaAgent](https://github.com/vishalmysore/layaAgent)의 한국어판입니다. 화면·도구·후보 추출기·과제 세트가 한국어이고, 모델은 다국어 Laya 체크포인트를 씁니다. 자세한 내용은 **[README-ko.md](README-ko.md)** 를 보세요. 아래는 원본 영어 README입니다.
+
 # layaAgent
 
 **An AI agent that runs entirely in a browser tab.** A 421M typed-decision encoder (Laya, *System 1*) makes the routine decisions, a small in-browser LLM (WebLLM, *System 2*) steps in only when Laya is unsure, and every step that changes something (saving or deleting notes, sending a message) needs your OK. Every step is drawn as a graph you can click through.
