@@ -1,8 +1,8 @@
-name: Test and deploy to GitHub Pages
+name: 테스트 후 GitHub Pages 배포
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
   workflow_dispatch:
 
 permissions:
@@ -29,16 +29,16 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Unit tests (tools, extraction, gate, agent loop, metrics, task suite)
+      - name: 단위 테스트 (도구·추출·게이트·에이전트 루프·지표·과제 세트)
         run: npm test
 
-      # No model is bundled: System 1 streams from Hugging Face (VishalMysore/layaForWebTrained, produced by the
-      # layaForWeb project) and System 2 (WebLLM) from the MLC model repositories, so the site stays ~36 MB.
-      - name: Assemble the site
+      # 모델은 저장소에 넣지 않는다: System 1은 convaiinnovations/laya-multilingual의 GitHub Pages 미러에서,
+      # System 2(WebLLM)는 MLC 모델 저장소에서 스트리밍하므로 사이트는 약 37MB로 유지된다.
+      - name: 사이트 조립
         run: node scripts/prepare_site.mjs
 
-      - name: Check the model repository is reachable
-        run: curl -fsSL https://huggingface.co/VishalMysore/layaForWebTrained/resolve/main/manifest.json | head -c 200
+      - name: 모델 저장소 접근 확인
+        run: curl -fsSL https://realizer-1966.github.io/laya-web-ko/model-multilingual/manifest.json | head -c 200
 
       - uses: actions/configure-pages@v5
 
